@@ -79,23 +79,37 @@ jobs:
     docker:
       name: Containerization
       needs: [unit-testing, code-coverage]
+      permissions: 
+        packages: write     #this permission is done at the job level to allow the default github toek associated with the workflow to have access to push to ghcr
       runs-on: ubutu-latest
       steps:
         - name: checkout
           uses: actions/checkout@v4
 
         - name: Docker login
-          uses: docker/login-actions@v3
+          uses: docker/login-action@v3
           with:
-            userame: ${{ secrets.DOCKERHUB_USERNAME}}
+            username: ${{ secrets.DOCKERHUB_USERNAME}}
             password: ${{secrets.DOCKERHUB_TOKEN}}
+
+
+            #use the step below if you are using a container resgitry other than docker (e.g github CR)
+        - name: GHCR login
+          uses: docker/login-action@v3
+          with:
+            registry: ghcr.io
+            #for the credentials, no need to store them as secrets or varaibles in the repo settings, github already made provison for this and can be referenced as seen below
+            username: ${{ github.repository_owner}}
+            password: ${{ secrets.GITHUB_TOKEN }} 
      
         - name: Docker build
           uses: docker/build-push-action@v5
           with:
             context: .
             push: false   #change this to true  if you want to push the image to a container registry
-            tag: ${{secrets.DOCKERHUB_USERNAME}}/solar-system:${{github.sha}}
+            tags: ${{secrets.DOCKERHUB_USERNAME}}/solar-system:${{github.sha}}
+            #uncomment this if you want to push to multiple registry and make it a multi-line tag
+            #ghcr.io/${{github.repository_owner}}/solar-system:${{github.sha}}
 
         - name: Testing the docker image
           run: |
