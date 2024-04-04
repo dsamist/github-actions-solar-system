@@ -32,7 +32,7 @@ jobs:
     #       uses: actions/cache@v3
     #       with:
     #         path: node_modules
-    #         key: ${{runner.os}}-node-modules-${{hashFiles('package-lock.json')}}
+    #         key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
 
     #     - name: Install Dependencies
     #       run: npm install
@@ -63,7 +63,7 @@ jobs:
     #       uses: actions/cache@v4
     #       with:
     #        path: node_modules
-    #        key: ${{runner.os}}-node-modules-${{hashFiles('package-lock.json')}}
+    #        key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
 
     #     - name: Install dependencies
     #       run: npm install
@@ -92,8 +92,8 @@ jobs:
     #     - name: Docker login
     #       uses: docker/login-action@v3
     #       with:
-    #         username: ${{ secrets.DOCKERHUB_USERNAME}}
-    #         password: ${{secrets.DOCKERHUB_TOKEN}}
+    #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+    #         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
 
     #         #use the step below if you are using a container resgitry other than docker (e.g github CR)
@@ -102,7 +102,7 @@ jobs:
     #       with:
     #         registry: ghcr.io
     #         #for the credentials, no need to store them as secrets or varaibles in the repo settings, github already made provison for this and can be referenced as seen below
-    #         username: ${{ github.repository_owner}}
+    #         username: ${{ github.repository_owner }}
     #         password: ${{ secrets.GITHUB_TOKEN }} 
      
     #     - name: Docker build
@@ -110,9 +110,9 @@ jobs:
     #       with:
     #         context: .
     #         push: false   #change this to true  if you want to push the image to a container registry
-    #         tags: ${{secrets.DOCKERHUB_USERNAME}}/solar-system:${{github.sha}}
+    #         tags: ${{ secrets.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
     #         #uncomment this if you want to push to multiple registry and make it a multi-line tag
-    #         #ghcr.io/${{github.repository_owner}}/solar-system:${{github.sha}}
+    #         #ghcr.io/${{ github.repository_owner }}/solar-system:${{ github.sha }}
 
     #     - name: Testing the docker image
     #       run: |
@@ -122,7 +122,7 @@ jobs:
     #         -e MONGO_URI=$MONGO_URI \
     #         -e MONGO_USERNAME=$MONGO_USERNAME \
     #         -e MONGO-PASSWORD=$MONGO_PASSWORD \
-    #         ${{secrets.DOCKERHUB_USERNAME}}/solar-system:${{github.sha}}
+    #         ${{ secrets.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
 
     #         export IP=$(docker inspect -f '{{range .Networksettings.Networks}}{{.IPAddress}}{{end}}' solar-system-app)
     #         echo $IP
@@ -144,11 +144,38 @@ jobs:
             version: 'v1.26.0'
           id: install
 
+        - name: Set the kubeconfig file
+          uses: azure/k8s-set-context@v4
+          with:
+            method: kubeconfig
+            kubeconfig: ${{ secrets.KUBECONFIG }}   #this is assumed to be saved in the config file already
+            #context: '<context>'  #only use this if you have more than one context in the kubeconfig file
+
         - name: Display the k8s cluster details
           run: |
             kubectl version --short -o yaml
             echo ---------------------------
             kubectl get nodes
+
+        - name: Save ingress controller IP
+          run: |
+            echo "INGRESS_IP=$(kubectl -n ingress-nginx get services ingress-nginxcontroller -o jsonpath="{.status.loadbalancer.ingress[0].ip}")" >> "$GITHUB_ENV"
+
+        - name: Replace placeholders token in k8s manifest files
+          uses: cschleiden/replace-tokens@v1
+          with:
+            tokenPrefix: '_{_'
+            tokenSuffix: '_}_'
+            files: '["kubernetes/development/*.yaml"]'
+          env:
+            NAMESPACE: ${{ vars.NAMESPACE }}
+            REPLICAS: ${{ vars.REPLICAS }}
+            IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
+            INGRESS_IP: ${{ env.INGRESS_IP }}
+         
+        - name: Check the manifest files to see that variables were replaced
+          run: |
+           cat kubernetes/development/*.yaml
 
 
 
